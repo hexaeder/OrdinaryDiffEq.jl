@@ -10,6 +10,9 @@ dt⋅f(innertmp + γ⋅z, p, t + c⋅dt) + outertmp = z
 ```
 
 where `dt` is the step size and `γ` and `c` are constants, and return the solution `z`.
+
+Whether `innertmp` and `outertmp` is used for the evaluation is controlled by setting `nlsolver.method`.
+In both cases the variable name is actually `nlsolver.tmp`.
 """
 function nlsolve!(nlsolver::NL, integrator::SciMLBase.DEIntegrator,
         cache = nothing, repeat_step = false) where {NL <: AbstractNLSolver}
@@ -27,7 +30,7 @@ function nlsolve!(nlsolver::NL, integrator::SciMLBase.DEIntegrator,
         always_new || update_W!(nlsolver, integrator, cache, γW, repeat_step)
     end
 
-    @unpack maxiters, κ, fast_convergence_cutoff = nlsolver
+    (; maxiters, κ, fast_convergence_cutoff) = nlsolver
 
     initialize!(nlsolver, integrator)
     nlsolver.status = check_div′ ? Divergence : Convergence
