@@ -25,7 +25,7 @@ alg_order(alg::Alshina2) = 2
 alg_order(alg::Alshina3) = 3
 alg_order(alg::Alshina6) = 6
 
-SciMLBase.has_lazy_interpolation(alg::BS5) = true
+SciMLBase.has_lazy_interpolation(alg::BS5) = _unwrap_val(alg.lazy)
 
 isfsal(alg::FRK65) = true
 isfsal(alg::RKO65) = false
@@ -44,6 +44,7 @@ ssp_coefficient(alg::Euler) = 1
 function prepare_alg(
         alg::SplitEuler,
         u0::AbstractArray,
-        p, prob)
-    alg
+        p, prob
+    )
+    return alg
 end

@@ -224,13 +224,13 @@ function gen_algcache(cacheexpr::Expr,constcachename::Symbol,algname::Symbol,tab
     end
 
     quote
-        function alg_cache(alg::$algname,u,rate_prototype,uEltypeNoUnits,uBottomEltypeNoUnits,tTypeNoUnits,uprev,uprev2,f,t,dt,reltol,p,calck,::Val{false})
+        function alg_cache(alg::$algname,u,rate_prototype,uEltypeNoUnits,uBottomEltypeNoUnits,tTypeNoUnits,uprev,uprev2,f,t,dt,reltol,p,calck,::Val{false}, verbose)
             tf = TimeDerivativeWrapper(f,u,p)
             uf = UDerivativeWrapper(f,t,p)
             J,W = build_J_W(alg,u,uprev,p,t,dt,f, nothing, uEltypeNoUnits,Val(false))
             $constcachename(tf,uf,$tabname(constvalue(uBottomEltypeNoUnits),constvalue(tTypeNoUnits)),J,W,nothing)
         end
-        function alg_cache(alg::$algname,u,rate_prototype,uEltypeNoUnits,uBottomEltypeNoUnits,tTypeNoUnits,uprev,uprev2,f,t,dt,reltol,p,calck,::Val{true})
+        function alg_cache(alg::$algname,u,rate_prototype,uEltypeNoUnits,uBottomEltypeNoUnits,tTypeNoUnits,uprev,uprev2,f,t,dt,reltol,p,calck,::Val{true}, verbose)
             du = zero(rate_prototype)
             du1 = zero(rate_prototype)
             du2 = zero(rate_prototype)
@@ -254,7 +254,8 @@ function gen_algcache(cacheexpr::Expr,constcachename::Symbol,algname::Symbol,tab
             linprob = LinearProblem(W,_vec(linsolve_tmp); u0=_vec(tmp))
             linsolve = init(linprob,alg.linsolve,alias = LinearAliasSpecifier(alias_A=true,alias_b=true),
                             Pl = LinearSolve.InvPreconditioner(Diagonal(_vec(weight))),
-                            Pr = Diagonal(_vec(weight))) 
+                            Pr = Diagonal(_vec(weight)),
+                            verbose = verbose.linear_verbosity) 
             $cachename($(valsyms...))
         end
     end
@@ -891,8 +892,6 @@ function _transformtab(Alpha,Gamma,B,Bhat)
 end
 
 
-
-
 # 2 step ROS Methods
 """
     ROS2Tableau()
@@ -912,8 +911,6 @@ function ROS2Tableau() # 2nd order
     a,C,b,btilde,d,c=_transformtab(Alpha,Gamma,B,Bhat)
     RosenbrockAdaptiveTableau(a,C,b,btilde,gamma,d,c)
 end
-
-
 
 
 """
@@ -982,8 +979,6 @@ function ROS2PRTableau() # 2nd order
 end
 
 
-
-
 """
     ROS2STableau()
 
@@ -1008,7 +1003,6 @@ function ROS2STableau() # 2nd order
 end
 
 
-
 """
     ROS3Tableau()
 E. Hairer, G. Wanner, Solving ordinary differential equations II,
@@ -1029,7 +1023,6 @@ function ROS3Tableau() # 3rd order
     a,C,b,btilde,d,c=_transformtab(Alpha,Gamma,B,Bhat)
     RosenbrockAdaptiveTableau(a,C,b,btilde,gamma,d,c)
 end
-
 
 
 """
@@ -1055,8 +1048,6 @@ function ROS3PRTableau() # 3rd order
 end
 
 
-
-
 """
     Scholz4_7Tableau()
 
@@ -1079,7 +1070,6 @@ function Scholz4_7Tableau() # 3rd order
     a,C,b,btilde,d,c=_transformtab(Alpha,Gamma,B,Bhat)
     RosenbrockAdaptiveTableau(a,C,b,btilde,gamma,d,c)
 end
-
 
 
 """
@@ -1132,8 +1122,6 @@ macro ROS23(part)
         nothing
     end
 end
-
-
 
 
 # 4 step ROS Methods
@@ -1288,7 +1276,6 @@ function ROS3PRLTableau() # 3rd order
 end
 
 
-
 """
     ROS3PRL2Tableau()
 
@@ -1314,7 +1301,6 @@ function ROS3PRL2Tableau() # 3rd order
     a,C,b,btilde,d,c=_transformtab(Alpha,Gamma,B,Bhat)
     RosenbrockAdaptiveTableau(a,C,b,btilde,gamma,d,c)
 end
-
 
 
 """
