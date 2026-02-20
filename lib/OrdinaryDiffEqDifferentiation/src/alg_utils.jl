@@ -117,7 +117,12 @@ function prepare_user_sparsity(ad_alg, prob)
                     @. @view(jac_prototype[idxs]) = 1
                 end
             else
-                idxs = findall(!iszero, prob.f.mass_matrix)
+                idxs = if prob.f.mass_matrix isa Diagonal
+                    _idxs = findall(!iszero, LinearAlgebra.diag(prob.f.mass_matrix))
+                    CartesianIndex.(_idxs, _idxs)
+                else
+                    findall(!iszero, prob.f.mass_matrix)
+                end
                 for idx in idxs
                     sparsity[idx] = prob.f.mass_matrix[idx]
                 end

@@ -253,6 +253,10 @@ function build_jac_config(alg, f::F1, uf::F2, du1, uprev,
             if f.mass_matrix isa UniformScaling
                 idxs = diagind(jac_prototype)
                 @. @view(jac_prototype[idxs]) = 1
+            elseif f.mass_matrix isa Diagonal
+                _idxs = findall(!iszero, LinearAlgebra.diag(f.mass_matrix))
+                idxs = CartesianIndex.(_idxs, _idxs)
+                @. @view(jac_prototype[idxs]) = @view(f.mass_matrix[_idxs])
             else
                 idxs = findall(!iszero, f.mass_matrix)
                 @. @view(jac_prototype[idxs]) = @view(f.mass_matrix[idxs])

@@ -396,8 +396,14 @@ function _initialize_dae!(integrator::OrdinaryDiffEqCore.ODEIntegrator, prob::OD
     M = integrator.f.mass_matrix
     M isa UniformScaling && return
     update_coefficients!(M, u, p, t)
-    algebraic_vars = vec(all(iszero, M, dims = 1))
-    algebraic_eqs = vec(all(iszero, M, dims = 2))
+
+    if M isa LinearAlgebra.Diagonal
+        algebraic_vars = map(iszero, LinearAlgebra.diag(M))
+        algebraic_eqs = algebraic_vars
+    else
+        algebraic_vars = vec(all(iszero, M, dims = 1))
+        algebraic_eqs = vec(all(iszero, M, dims = 2))
+    end
 
     (iszero(algebraic_vars) || iszero(algebraic_eqs)) && return
     tmp = get_tmp_cache(integrator)[1]
@@ -417,7 +423,10 @@ function _initialize_dae!(integrator::OrdinaryDiffEqCore.ODEIntegrator, prob::OD
         tmp = DiffEqBase.value.(tmp)
     end
 
-    isAD = alg_autodiff(integrator.alg) isa AutoForwardDiff || typeof(u) !== typeof(_u)
+    isAD = alg_autodiff(integrator.alg) isa AutoForwardDiff ||
+           alg_autodiff(integrator.alg) isa ADTypes.AutoSparse{<:AutoForwardDiff} ||
+           typeof(u) !== typeof(_u)
+
     if isAD
         csize = count(algebraic_vars)
         if !(p isa SciMLBase.NullParameters) && typeof(_u) !== typeof(u)
