@@ -47,7 +47,7 @@ using OrdinaryDiffEqCore: resize_nlsolver!, _initialize_dae!,
     FastConvergence, Convergence,
     SlowConvergence, VerySlowConvergence, Divergence, NLStatus,
     MethodType, alg_order, error_constant,
-    alg_extrapolates, resize_J_W!, has_autodiff
+    alg_extrapolates, resize_J_W!, has_autodiff, find_algebraic_vars_eqs
 
 import OrdinaryDiffEqCore: _initialize_dae!, isnewton, get_W, isfirstcall, isfirststage,
     isJcurrent, get_new_W_γdt_cutoff, resize_nlsolver!, apply_step!,
