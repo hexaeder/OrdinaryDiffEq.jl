@@ -25,6 +25,10 @@ _tagged_autodiff(u, ::Val{0}) = _tagged_autodiff(u, Val(1))
 function _tagged_autodiff(u, ::Val{CS} = Val(1)) where {CS}
     return AutoForwardDiff{CS}(ForwardDiff.Tag(OrdinaryDiffEqTag(), eltype(u)))
 end
+# Without a chunk size, DifferentiationInterface picks one from the Jacobian coloring.
+function _tagged_autodiff(u, ::Nothing)
+    return AutoForwardDiff(; tag = ForwardDiff.Tag(OrdinaryDiffEqTag(), eltype(u)))
+end
 
 function default_nlsolve(
         ::Nothing, isinplace::Val{true}, u, ::AbstractNonlinearProblem,
@@ -607,6 +611,18 @@ end
 _scalar_tol(tol::Number, idxs) = tol
 _scalar_tol(tol, idxs) = minimum(tol[idxs])
 
+# if nlsolve alg is explicitly provided it's safer to assume it might be using ForwardDiff
+_brown_dualcaches(alg, isAD) = isAD || alg.nlsolve !== nothing
+
+# The default nlsolve uses the chunk size the solver's AD settled on in `prepare_alg`.
+# That chunk was sized for the full system, so if it is left open (`Val(0)`) or does not fit
+# the `n` unknowns of the algebraic subsystem, DifferentiationInterface picks one instead.
+function _brown_chunksize(alg, n)
+    chunksize = SciMLBase.forwarddiff_chunksize(alg)
+    return _fits_chunk(chunksize, n) ? chunksize : nothing
+end
+_fits_chunk(::Val{CS}, n) where {CS} = 0 < CS <= n
+
 function _initialize_dae!(
         integrator::OrdinaryDiffEqCore.ODEIntegrator, prob::ODEProblem,
         alg::DiffEqBase.BrownFullBasicInit, isinplace::Val{true}
@@ -640,17 +656,15 @@ function _initialize_dae!(
     end
 
     isAD = _isforwarddiff_alg(integrator.alg) || typeof(u) !== typeof(_u)
-    if isAD
-        # A larger chunksize, calibrated according to count(algebraic_vars),
-        # would be more efficient but cannot be inferred from types
-        # chunk = ForwardDiff.pickchunksize(count(algebraic_vars))
+    dualcaches = _brown_dualcaches(alg, isAD)
+    nlchunk = _brown_chunksize(integrator.alg, count(algebraic_vars))
+    if dualcaches
+        # start with a single lane, `get_tmp` grows it to whatever chunk the nlsolve uses
         chunk = 1
-        _tmp = DiffCache(tmp, chunk)
-        _du_tmp = DiffCache(similar(tmp), chunk)
-        nlchunk = Val(chunk)
+        _tmp = DiffCache(tmp, chunk; warn_on_resize = false)
+        _du_tmp = DiffCache(similar(tmp), chunk; warn_on_resize = false)
     else
         _tmp, _du_tmp = tmp, similar(tmp)
-        nlchunk = SciMLBase.forwarddiff_chunksize(integrator.alg)
     end
 
     nlequation! = @closure (out, x, p) -> begin
@@ -660,8 +674,8 @@ function _initialize_dae!(
         else
             T = eltype(x)
         end
-        uu = isAD ? get_tmp(_tmp, T) : _tmp
-        du_tmp = isAD ? get_tmp(_du_tmp, T) : _du_tmp
+        uu = dualcaches ? get_tmp(_tmp, T) : _tmp
+        du_tmp = dualcaches ? get_tmp(_du_tmp, T) : _du_tmp
         copyto!(uu, _u)
         alg_uu = @view uu[algebraic_vars]
         alg_uu .= x
@@ -713,17 +727,14 @@ function _initialize_dae!(
     check_dae_tolerance(integrator, resid, abstol, t, isinplace) && return
 
     isAD = _isforwarddiff_alg(integrator.alg)
-    if isAD
-        # A larger chunksize, calibrated according to count(algebraic_vars),
-        # would be more efficient but cannot be inferred from types
-        # chunk = ForwardDiff.pickchunksize(count(algebraic_vars))
+    dualcaches = _brown_dualcaches(alg, isAD)
+    nlchunk = _brown_chunksize(integrator.alg, count(algebraic_vars))
+    if dualcaches
+        # start with a single lane, `get_tmp` grows it to whatever chunk the nlsolve uses
         chunk = 1
-        _tmp = DiffCache(similar(u0), chunk)
-        nlchunk = Val(chunk)
+        _tmp = DiffCache(similar(u0), chunk; warn_on_resize = false)
     else
         _tmp = similar(u0)
-        # This was called anyway as an argument to default_nlsolve
-        nlchunk = SciMLBase.forwarddiff_chunksize(integrator.alg)
     end
 
     if u0 isa Number
@@ -734,7 +745,7 @@ function _initialize_dae!(
     end
 
     nlequation = @closure (x, _) -> begin
-        uu = isAD ? get_tmp(_tmp, x) : _tmp
+        uu = dualcaches ? get_tmp(_tmp, x) : _tmp
         copyto!(uu, integrator.u)
         alg_uu = @view uu[algebraic_vars]
         alg_uu .= x
@@ -809,10 +820,11 @@ function _initialize_dae!(
     end
 
     isAD = _isforwarddiff_alg(integrator.alg) || typeof(u) !== typeof(_u)
-    if isAD
+    dualcaches = _brown_dualcaches(alg, isAD)
+    if dualcaches
         chunk = ForwardDiff.pickchunksize(length(tmp))
-        _tmp = DiffCache(tmp, chunk)
-        _du_tmp = DiffCache(du_tmp, chunk)
+        _tmp = DiffCache(tmp, chunk; warn_on_resize = false)
+        _du_tmp = DiffCache(du_tmp, chunk; warn_on_resize = false)
     else
         _tmp, _du_tmp = tmp, du_tmp
     end
@@ -824,8 +836,8 @@ function _initialize_dae!(
         else
             T = eltype(x)
         end
-        du_tmp = isAD ? get_tmp(_du_tmp, T) : _du_tmp
-        uu = isAD ? get_tmp(_tmp, T) : _tmp
+        du_tmp = dualcaches ? get_tmp(_du_tmp, T) : _du_tmp
+        uu = dualcaches ? get_tmp(_tmp, T) : _tmp
 
         @. du_tmp = ifelse(differential_vars, x, _du)
         @. uu = ifelse(differential_vars, _u, x)
